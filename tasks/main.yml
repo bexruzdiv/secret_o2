@@ -1,0 +1,79 @@
+---
+# tasks file for vault_secret_operator
+- name: Create namespace
+  command: kubectl create ns {{ project }}-microservices
+  vars:
+    project: "{{ project }}"
+
+- name: Create service account
+  command: kubectl create serviceaccount vault-auth -n {{ project }}-microservices
+  vars:
+    project: "{{ project }}"
+
+- name: enable and configure the auth method
+  ansible.builtin.shell:
+    cmd: vault auth enable -path=kubernetes-{{ project }} kubernetes
+  environment:
+    VAULT_ADDR: "{{ vso_vault_address }}"
+    VAULT_TOKEN: "{{ vso_vault_token }}"
+  ignore_errors: true
+
+#! policy
+- name: Write Vault policy
+  shell: |
+    vault policy write kubernetes-{{ project }} - <<EOF
+    path "secret/data/k8s/{{ project }}/*" {
+      capabilities = ["read"]
+    }
+    EOF
+
+
+
+# ! ENVIRONMENT SET 
+- name: Get token from Kubernetes secret
+  ansible.builtin.shell:
+    cmd: "kubectl get secret vault-auth --output='go-template={{ '{{' }} .data.token {{ '}}' }}' | base64 --decode"
+  register: __vso_token_output
+
+- name: Get Kubernetes CA certificate
+  ansible.builtin.shell:
+    cmd: "kubectl config view --raw --minify --flatten --output='jsonpath={.clusters[].cluster.certificate-authority-data}' | base64 --decode"
+  register: __vso_ca_cert_output
+
+- name: Get Kubernetes host
+  ansible.builtin.shell:
+    cmd: "kubectl config view --raw --minify --flatten --output='jsonpath={.clusters[].cluster.server}'"
+  register: __vso_kube_host_output
+# !!!
+- name: Write Vault authentication configuration
+  ansible.builtin.shell:
+    cmd: >
+      vault write auth/kubernetes-{{ project }}/config 
+      token_reviewer_jwt="{{ __vso_token_output.stdout }}" 
+      kubernetes_host="{{ __vso_kube_host_output.stdout }}" 
+      kubernetes_ca_cert="{{ __vso_ca_cert_output.stdout }}" 
+      issuer="https://kubernetes.default.svc.cluster.local"
+  environment:
+    VAULT_ADDR: "{{ vso_vault_address }}"
+    VAULT_TOKEN: "{{ vso_vault_token }}"
+
+- name: Write Vault authentication configuration
+  ansible.builtin.shell:
+    cmd: vault write auth/kubernetes-{{ project }}/role/{{ project }}
+      bound_service_account_names=vault-auth
+      bound_service_account_namespaces={{ project }}-microservices
+      policies=kubernetes-{{ project }}
+      ttl=24h
+  environment:
+    VAULT_ADDR: "{{ vso_vault_address }}"
+    VAULT_TOKEN: "{{ vso_vault_token }}"
+
+- name: Put data to secret
+  ansible.builtin.shell:
+    cmd: >
+      vault kv put secret/k8s/{{ project }}/test-secret 
+      username='VERY_POWERFUL' 
+      password='PASSWORD' 
+  environment:
+    VAULT_ADDR: "{{ vso_vault_address }}"
+    VAULT_TOKEN: "{{ vso_vault_token }}"

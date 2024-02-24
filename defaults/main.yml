@@ -1,0 +1,7 @@
+---
+# defaults file for vault_secret_operator\
+
+vso_vault_address: "https://vaultb.bexruzdev.uz" #your vault cluster address
+vso_vault_token: "hvs.4XjPIJ4zUyL86qp9zscRz06M" # Your vault Token 
+project: test-project  # your project name
+
