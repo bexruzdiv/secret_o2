@@ -2,6 +2,6 @@
 # defaults file for vault_secret_operator\
 
 vso_vault_address: "http://18.212.236.56:8200" #your vault cluster address
-vso_vault_token: "" # Your vault Token 
-project: test7   # your project name
+vso_vault_token: "hvs.DpMVigg8GjQxhEdPFAYZpwz7" # Your vault Token 
+project: me7   # your project name
 
