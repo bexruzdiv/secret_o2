@@ -1,14 +1,82 @@
 ---
-# tasks file for vault_secret_operator
+- name: install pre-requisites
+  pip:
+    name:
+      - openshift
+      - pyyaml
+      - kubernetes 
+
+- name: Check if Helm repository already exists
+  shell: helm repo list | grep -q "hashicorp"
+  # ignore_errors: true
+  register: __helm_repo_check
+
+- name: Add Helm repository if it doesn't exist
+  when: __helm_repo_check.rc != 0
+  ansible.builtin.shell:
+    cmd: helm repo add hashicorp https://helm.releases.hashicorp.com
+  ignore_errors: true
+
+- name: Check if Helm release already exists
+  ansible.builtin.shell:
+    cmd: helm list -n vault | grep -q "^vault\s"
+  ignore_errors: true
+  register: __helm_release_check
+
+- name: Install Helm chart if release doesn't exist
+  when: __helm_release_check.rc != 0
+  community.kubernetes.helm:
+    release_name: vault
+    chart_ref: hashicorp/vault
+    chart_version: 0.26.1
+    release_namespace: vault
+    create_namespace: true
+    release_values:
+      injector:
+        enabled: "true"
+        externalVaultAddr: "{{ vso_vault_address }}"
+
+
+- name: Check if secret already exists
+  ansible.builtin.shell:
+    cmd: kubectl get secret vault-token-g955r -n vault
+  register: __secret_check
+  ignore_errors: true
+
+- name: Create Kubernetes Secret
+  community.kubernetes.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: vault-token-g955r
+        annotations:
+          kubernetes.io/service-account.name: vault
+      type: kubernetes.io/service-account-token
+    namespace: vault
+
+
 - name: Create namespace
-  command: kubectl create ns {{ project }}-microservices
-  vars:
-    project: "{{ project }}"
+  community.kubernetes.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ project }}-microservices"
+
+
 
 - name: Create service account
-  command: kubectl create serviceaccount vault-auth -n {{ project }}-microservices
-  vars:
-    project: "{{ project }}"
+  community.kubernetes.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vault-auth
+        namespace: "{{ project }}-microservices"
 
 - name: enable and configure the auth method
   ansible.builtin.shell:
@@ -26,13 +94,15 @@
       capabilities = ["read"]
     }
     EOF
-
+  environment:
+    VAULT_ADDR: "{{ vso_vault_address }}"
+    VAULT_TOKEN: "{{ vso_vault_token }}"
 
 
 # ! ENVIRONMENT SET 
 - name: Get token from Kubernetes secret
   ansible.builtin.shell:
-    cmd: "kubectl get secret vault-auth --output='go-template={{ '{{' }} .data.token {{ '}}' }}' | base64 --decode"
+    cmd: "kubectl get -n vault secret vault-token-g955r --output='go-template={{ '{{' }} .data.token {{ '}}' }}' | base64 --decode"
   register: __vso_token_output
 
 - name: Get Kubernetes CA certificate
@@ -44,6 +114,7 @@
   ansible.builtin.shell:
     cmd: "kubectl config view --raw --minify --flatten --output='jsonpath={.clusters[].cluster.server}'"
   register: __vso_kube_host_output
+
 # !!!
 - name: Write Vault authentication configuration
   ansible.builtin.shell:
