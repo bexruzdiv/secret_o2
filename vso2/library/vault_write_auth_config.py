@@ -3,6 +3,26 @@
 from ansible.module_utils.basic import AnsibleModule
 import subprocess
 
+def check_existing_config(module, k8s_auth_name, vault_address, vault_token):
+    command = f"vault read auth/{k8s_auth_name}/config"
+
+    result = subprocess.run(
+        command,
+        shell=True,
+        env={'VAULT_ADDR': vault_address, 'VAULT_TOKEN': vault_token},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+
+    if result.returncode == 0:
+        output = result.stdout.decode()
+        if output.strip() != "":
+            return True  # Configuration exists
+        else:
+            return False  # Configuration does not exist
+    else:
+        return False  # Failed to read configuration
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -23,6 +43,11 @@ def main():
     kubernetes_host = module.params['kubernetes_host']
     kubernetes_ca_cert = module.params['kubernetes_ca_cert']
     issuer = module.params['issuer']
+
+    # Check if the configuration already exists
+    existing_config = check_existing_config(module, k8s_auth_name, vault_address, vault_token)
+    if existing_config:
+        module.fail_json(msg=f"Vault authentication configuration for '{k8s_auth_name}' already exists")
 
     # Construct the command to write the Vault authentication configuration
     command = f"vault write auth/{k8s_auth_name}/config "

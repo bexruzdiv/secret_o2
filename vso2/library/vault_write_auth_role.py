@@ -3,6 +3,26 @@
 from ansible.module_utils.basic import AnsibleModule
 import subprocess
 
+def check_existing_role(module, k8s_auth_name, role_name, vault_address, vault_token):
+    command = f"vault read auth/{k8s_auth_name}/role/{role_name}"
+
+    result = subprocess.run(
+        command,
+        shell=True,
+        env={'VAULT_ADDR': vault_address, 'VAULT_TOKEN': vault_token},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+
+    if result.returncode == 0:
+        output = result.stdout.decode()
+        if output.strip() != "":
+            return True  # Role exists
+        else:
+            return False  # Role does not exist
+    else:
+        return False  # Failed to read role
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -25,6 +45,11 @@ def main():
     service_account_namespaces = module.params['service_account_namespaces']
     policies = module.params['policies']
     ttl = module.params['ttl']
+
+    # Check if the role already exists
+    existing_role = check_existing_role(module, k8s_auth_name, role_name, vault_address, vault_token)
+    if existing_role:
+        module.fail_json(msg=f"Vault role '{role_name}' already exists")
 
     # Construct the command to write the Vault authentication configuration
     command = f"vault write auth/{k8s_auth_name}/role/{role_name} \

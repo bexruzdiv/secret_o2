@@ -6,6 +6,14 @@
       - pyyaml
       - kubernetes 
 
+- name: creator secret
+  vault_create_secret:
+    name: secret
+    secret_type: "kv-v2"
+    vault_address: "{{ vso_vault_address }}"
+    vault_token: "{{ vso_vault_token }}"
+
+
 - name: Check if Helm repository already exists
   shell: helm repo list | grep -q "hashicorp"
   # ignore_errors: true
@@ -73,18 +81,24 @@
         namespace: "{{ project }}-microservices"
 
 - name: Enable and configure the auth method
-  enable_vault_auth:
-    vault_address: "{{ vso_vault_address }}"
-    vault_token: "{{ vso_vault_token }}"
+  vault_enable_auth:
     k8s_auth_name: kubernetes-"{{ project }}"
     auth_method: "kubernetes"
+    vault_address: "{{ vso_vault_address }}"
+    vault_token: "{{ vso_vault_token }}"
 
 # ! policy
 - name: Write Vault policy
-  write_vault_policy:
-    project_name: "{{ project }}"
+  vault_write_policy:
+    name: kubernetes-"{{ project }}"
+    path: "secret/data/k8s/{{ project }}/*"
     vault_address: "{{ vso_vault_address }}"
     vault_token: "{{ vso_vault_token }}"
+    permission: 
+      - read
+      - list
+      - update
+
 
 
 # ! ENVIRONMENT SET 
@@ -105,30 +119,31 @@
 
 # !!! there is no check 
 - name: Write Vault authentication configuration
-  write_vault_auth_config:
-    vault_address: "{{ vso_vault_address }}"
-    vault_token: "{{ vso_vault_token }}"
+  vault_write_auth_config:
     k8s_auth_name: kubernetes-"{{ project }}"
+
     token_reviewer_jwt: "{{ __vso_token_output.stdout }}"
     kubernetes_host: "{{ __vso_kube_host_output.stdout }}"
     kubernetes_ca_cert: "{{ __vso_ca_cert_output.stdout }}"
     issuer: "https://kubernetes.default.svc.cluster.local"
+    vault_address: "{{ vso_vault_address }}"
+    vault_token: "{{ vso_vault_token }}"
 
 # !!! there is no check 
 - name: Write Vault role configuration
-  write_vault_auth_role:
-    vault_address: "{{ vso_vault_address }}"
-    vault_token: "{{ vso_vault_token }}"
+  vault_write_auth_role:
     k8s_auth_name: kubernetes-"{{ project }}"
     role_name: "{{ project }}"
+    policies: kubernetes-"{{ project }}"
     service_account_names: "vault-auth"
     service_account_namespaces: "{{ project }}-microservices"
-    policies: kubernetes-"{{ project }}"
     ttl: "24h"
+    vault_address: "{{ vso_vault_address }}"
+    vault_token: "{{ vso_vault_token }}"
 
 
 - name: Put data to secret
-  put_vault_secret:
+  vault_put_secret:
     vault_address: "{{ vso_vault_address }}"
     vault_token: "{{ vso_vault_token }}"
     secret_path: "secret/k8s/{{ project }}/test-secret"
@@ -147,7 +162,7 @@
 #   put_vault_secret:
 #     vault_address: "{{ vso_vault_address }}"
 #     vault_token: "{{ vso_vault_token }}"
-#     secret_path: "kvv2/webapp"
+#     secret_path: "me5/test2"
 #     data:
 #       - key: "name"
 #         value: "Bexruz"
@@ -158,4 +173,6 @@
 #       - key: "interest"
 #         value: "engenering"
 #       - key: "info"
-#         value: "devops"
+#         value: "cybersecurity"
+
+

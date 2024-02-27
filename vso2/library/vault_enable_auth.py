@@ -8,7 +8,7 @@ def main():
         argument_spec=dict(
             vault_address=dict(type='str', required=True),
             vault_token=dict(type='str', required=True),
-            k8s_auth_name=dict(type='str', required=True)
+            k8s_auth_name=dict(type='str', required=True),
             auth_method=dict(type='str', required=True)
             
         )
