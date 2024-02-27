@@ -14,28 +14,35 @@
     vault_token: "{{ vso_vault_token }}"
 
 
-- name: Check if Helm repository already exists
-  shell: helm repo list | grep -q "hashicorp"
-  # ignore_errors: true
-  register: __helm_repo_check
+# - name: Check if Helm repository already exists
+#   command: helm repo list | grep -q "hashicorp"
+#   register: __helm_repo_check
+#   ignore_errors: true
 
-- name: Add Helm repository if it doesn't exist
-  when: __helm_repo_check.rc != 0
-  ansible.builtin.shell:
-    cmd: helm repo add hashicorp https://helm.releases.hashicorp.com
-  ignore_errors: true
+- name: Add a repository
+  # when: __helm_repo_check.rc != 0
+  kubernetes.core.helm_repository:
+    name: hashicorp
+    repo_url: https://helm.releases.hashicorp.com
 
-- name: Check if Helm release already exists
-  ansible.builtin.shell:
-    cmd: helm list -n vault | grep -q "^vault\s"
-  ignore_errors: true
-  register: __helm_release_check
+# - name: Check if Helm release already exists
+#   ansible.builtin.shell:
+#     cmd: helm list -n vault | grep -q "^vault\s"
+#   ignore_errors: true
+#   register: __helm_release_check
 
 - name: Install Helm chart if release doesn't exist
-  when: __helm_release_check.rc != 0
-  ansible.builtin.shell:
-    cmd: helm install vault hashicorp/vault --set="injector.enabled=true" --set=injector.externalVaultAddr={{ vso_vault_address }} --version 0.22.1 -n vault --create-namespace
-  ignore_errors: true
+  # when: __helm_release_check.rc != 0
+  community.kubernetes.helm:
+    release_name: vault
+    chart_ref: hashicorp/vault
+    chart_version: 0.26.1
+    release_namespace: vault
+    create_namespace: true
+    release_values:
+      injector:
+        enabled: "true"
+        externalVaultAddr: "{{ vso_vault_address }}"
 
 
 
